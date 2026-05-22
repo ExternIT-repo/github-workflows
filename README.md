@@ -55,9 +55,7 @@ jobs:
     with:
       php-version: '8.2'
       test-command: 'composer test:coverage'
-      coverage-type: badge        # badge | codecov | none
-    secrets:
-      codecov-token: ${{ secrets.CODECOV_TOKEN }}
+      coverage-type: badge        # badge | none
 ```
 
 ---
@@ -75,9 +73,7 @@ jobs:
       db-image: 'mysql:8.4'
       db-name: 'myapp_test'
       database-url: 'mysql://root:test@127.0.0.1:3306/myapp_test?serverVersion=8.4'
-      coverage-type: codecov
-    secrets:
-      codecov-token: ${{ secrets.CODECOV_TOKEN }}
+      coverage-type: badge
 ```
 
 ---

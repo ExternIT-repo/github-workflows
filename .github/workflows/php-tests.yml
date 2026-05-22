@@ -17,7 +17,7 @@ on:
         type: string
         required: true
       coverage-type:
-        description: 'How to handle coverage output: badge, codecov, none'
+        description: 'How to handle coverage output: badge, none'
         type: string
         default: 'none'
       coverage-xml-path:
@@ -27,10 +27,6 @@ on:
       badge-output:
         type: string
         default: 'badges/php-coverage.svg'
-    secrets:
-      codecov-token:
-        required: false
-
 jobs:
   phpunit:
     name: PHPUnit
@@ -83,11 +79,3 @@ jobs:
           commit_message: 'Update PHP coverage badge'
           file_pattern: ${{ inputs.badge-output }}
 
-      - name: Upload to Codecov
-        if: inputs.coverage-type == 'codecov'
-        uses: codecov/codecov-action@v4
-        with:
-          file: ${{ inputs.coverage-xml-path }}
-          flags: unittests
-          fail_ci_if_error: true
-          token: ${{ secrets.codecov-token }}
