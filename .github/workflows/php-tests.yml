@@ -1,0 +1,93 @@
+name: PHP Tests
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        type: string
+        required: true
+      extensions:
+        description: 'PHP extensions to install (comma-separated)'
+        type: string
+        default: 'mbstring, intl, xml, dom, curl, zip'
+      install-command:
+        type: string
+        default: 'composer install --prefer-dist --no-progress --no-interaction --optimize-autoloader'
+      test-command:
+        type: string
+        required: true
+      coverage-type:
+        description: 'How to handle coverage output: badge, codecov, none'
+        type: string
+        default: 'none'
+      coverage-xml-path:
+        description: 'Path to clover XML coverage report'
+        type: string
+        default: 'coverage.xml'
+      badge-output:
+        type: string
+        default: 'badges/php-coverage.svg'
+    secrets:
+      codecov-token:
+        required: false
+
+jobs:
+  phpunit:
+    name: PHPUnit
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ inputs.php-version }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: ${{ inputs.extensions }}
+          coverage: xdebug
+          tools: composer:v2
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: $(composer config cache-files-dir)
+          key: composer-php${{ inputs.php-version }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-php${{ inputs.php-version }}-
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
+
+      - name: Generate coverage badge
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        run: |
+          php -r '
+          $xml = simplexml_load_file("${{ inputs.coverage-xml-path }}");
+          $metrics = $xml->project->metrics;
+          $covered = (int) $metrics["coveredstatements"];
+          $total   = (int) $metrics["statements"];
+          $percent = $total > 0 ? round(($covered / $total) * 100, 2) : 0;
+          $color   = $percent >= 90 ? "brightgreen" : ($percent >= 80 ? "green" : ($percent >= 70 ? "yellow" : ($percent >= 60 ? "orange" : "red")));
+          @mkdir("badges", 0777, true);
+          $svg = file_get_contents("https://img.shields.io/badge/php%20coverage-" . rawurlencode($percent . "%") . "-" . $color . ".svg");
+          file_put_contents("${{ inputs.badge-output }}", $svg);
+          '
+
+      - name: Commit coverage badge
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Update PHP coverage badge'
+          file_pattern: ${{ inputs.badge-output }}
+
+      - name: Upload to Codecov
+        if: inputs.coverage-type == 'codecov'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ${{ inputs.coverage-xml-path }}
+          flags: unittests
+          fail_ci_if_error: true
+          token: ${{ secrets.codecov-token }}

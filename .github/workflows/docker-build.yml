@@ -1,0 +1,113 @@
+name: Docker Build & Push
+
+on:
+  workflow_call:
+    inputs:
+      registry:
+        description: 'Container registry (docker.io, ghcr.io, ...)'
+        type: string
+        required: true
+      image-name:
+        description: 'Image name without registry prefix (ex: myorg/myapp)'
+        type: string
+        required: true
+      dockerfile:
+        type: string
+        default: 'Dockerfile'
+      context:
+        type: string
+        default: '.'
+      push:
+        description: 'Push image to registry after build and tests'
+        type: boolean
+        default: true
+      with-trivy:
+        description: 'Run Trivy CVE scan before push'
+        type: boolean
+        default: true
+      trivy-ignore-file:
+        type: string
+        default: '.trivyignore'
+      smoke-test-script:
+        description: 'Path to smoke test script in the repo (skipped if file absent)'
+        type: string
+        default: 'scripts/ci-smoke-test.sh'
+    secrets:
+      registry-username:
+        required: true
+      registry-token:
+        required: true
+
+jobs:
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.registry }}/${{ inputs.image-name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=ref,event=branch
+            type=sha,prefix=,format=short
+
+      - name: Login to registry
+        if: inputs.push
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ secrets.registry-username }}
+          password: ${{ secrets.registry-token }}
+
+      - name: Build (local)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: false
+          load: true
+          tags: local-test:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        env:
+          CI_IMAGE: local-test:ci
+        run: |
+          if [ -f "${{ inputs.smoke-test-script }}" ]; then
+            bash "${{ inputs.smoke-test-script }}"
+          fi
+
+      - name: Scan CVE (Trivy)
+        if: inputs.with-trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: local-test:ci
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: ${{ inputs.trivy-ignore-file }}
+
+      - name: Build & Push with attestations
+        if: inputs.push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha

@@ -1,0 +1,79 @@
+name: JS Tests
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: '22'
+      install-command:
+        type: string
+        default: 'npm ci'
+      test-command:
+        type: string
+        default: 'npm run test:coverage'
+      coverage-type:
+        description: 'How to handle coverage output: badge, codecov, none'
+        type: string
+        default: 'none'
+      coverage-summary-path:
+        description: 'Path to coverage-summary.json (Istanbul/V8 format)'
+        type: string
+        default: 'coverage/coverage-summary.json'
+      badge-output:
+        type: string
+        default: 'badges/js-coverage.svg'
+    secrets:
+      codecov-token:
+        required: false
+
+jobs:
+  js-coverage:
+    name: JS Tests
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
+
+      - name: Generate coverage badge
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        run: |
+          node -e '
+          const fs = require("fs");
+          const summary = JSON.parse(fs.readFileSync("${{ inputs.coverage-summary-path }}", "utf8"));
+          const pct     = Number(summary.total.lines.pct || 0).toFixed(2);
+          const numeric = Number(pct);
+          const color   = numeric >= 90 ? "brightgreen" : (numeric >= 80 ? "green" : (numeric >= 70 ? "yellow" : (numeric >= 60 ? "orange" : "red")));
+          fs.mkdirSync("badges", { recursive: true });
+          require("child_process").execSync(
+            `curl -sSL "https://img.shields.io/badge/js%20coverage-${encodeURIComponent(pct + "%")}-${color}.svg" -o "${{ inputs.badge-output }}"`
+          );
+          '
+
+      - name: Commit coverage badge
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Update JS coverage badge'
+          file_pattern: ${{ inputs.badge-output }}
+
+      - name: Upload to Codecov
+        if: inputs.coverage-type == 'codecov'
+        uses: codecov/codecov-action@v4
+        with:
+          flags: unittests
+          fail_ci_if_error: true
+          token: ${{ secrets.codecov-token }}
