@@ -79,29 +79,25 @@ jobs:
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-token }}
 
-      - name: Build (and push if enabled)
-        id: build
+      # load:true et attestations (provenance/sbom) sont incompatibles : les attestations
+      # créent un manifest list que le daemon Docker local ne supporte pas.
+      # On build donc en deux étapes : local sans attestations, puis push avec attestations depuis le cache GHA.
+      - name: Build local (smoke test + Trivy)
+        id: build-local
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
-          push: ${{ inputs.push }}
+          push: false
           load: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: ${{ inputs.push }}
-          sbom: ${{ inputs.push }}
+          tags: local-ci:latest
           build-args: ${{ inputs.build-args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Resolve local image tag
-        id: local-tag
-        run: echo "tag=$(echo '${{ steps.meta.outputs.tags }}' | head -1)" >> $GITHUB_OUTPUT
-
       - name: Smoke test
         env:
-          CI_IMAGE: ${{ steps.local-tag.outputs.tag }}
+          CI_IMAGE: local-ci:latest
         run: |
           if [ -f "${{ inputs.smoke-test-script }}" ]; then
             bash "${{ inputs.smoke-test-script }}"
@@ -111,12 +107,26 @@ jobs:
         if: inputs.with-trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ steps.local-tag.outputs.tag }}
+          image-ref: local-ci:latest
           format: table
           exit-code: '1'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: ${{ inputs.trivy-ignore-file }}
+
+      - name: Push with attestations
+        if: inputs.push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          build-args: ${{ inputs.build-args }}
+          cache-from: type=gha
 
       - name: Notify failure webhook
         if: ${{ failure() && inputs['notify-on-failure'] }}
