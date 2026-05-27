@@ -125,17 +125,15 @@ jobs:
           cache-from: type=gha
 
       - name: Notify failure webhook
-        if: ${{ failure() && inputs['notify-on-failure'] && secrets['failure-notification-webhook'] != '' }}
+        if: ${{ failure() && inputs['notify-on-failure'] }}
         env:
-          NOTIFICATION_WEBHOOK: ${{ secrets['failure-notification-webhook'] }}
+          NOTIFICATION_WEBHOOK: ${{ secrets.failure-notification-webhook }}
           REPOSITORY: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           WORKFLOW_NAME: ${{ github.workflow }}
         run: |
-          # Keep the payload provider-agnostic so each repository can route
-          # workflow failures to Slack, Teams, ntfy, or another webhook target
-          # without forcing a platform-specific contract in the shared workflow.
+          [ -z "$NOTIFICATION_WEBHOOK" ] && exit 0
           curl -fsSL -X POST "$NOTIFICATION_WEBHOOK" \
             -H 'Content-Type: application/json' \
             --data @- <<EOF
