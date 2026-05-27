@@ -79,21 +79,29 @@ jobs:
           username: ${{ secrets.registry-username }}
           password: ${{ secrets.registry-token }}
 
-      - name: Build (local)
+      - name: Build (and push if enabled)
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
-          push: false
+          push: ${{ inputs.push }}
           load: true
-          tags: local-test:ci
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: ${{ inputs.push }}
+          sbom: ${{ inputs.push }}
           build-args: ${{ inputs.build-args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Resolve local image tag
+        id: local-tag
+        run: echo "tag=$(echo '${{ steps.meta.outputs.tags }}' | head -1)" >> $GITHUB_OUTPUT
+
       - name: Smoke test
         env:
-          CI_IMAGE: local-test:ci
+          CI_IMAGE: ${{ steps.local-tag.outputs.tag }}
         run: |
           if [ -f "${{ inputs.smoke-test-script }}" ]; then
             bash "${{ inputs.smoke-test-script }}"
@@ -103,26 +111,12 @@ jobs:
         if: inputs.with-trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: local-test:ci
+          image-ref: ${{ steps.local-tag.outputs.tag }}
           format: table
           exit-code: '1'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: ${{ inputs.trivy-ignore-file }}
-
-      - name: Build & Push with attestations
-        if: inputs.push
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ inputs.context }}
-          file: ${{ inputs.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: true
-          sbom: true
-          build-args: ${{ inputs.build-args }}
-          cache-from: type=gha
 
       - name: Notify failure webhook
         if: ${{ failure() && inputs['notify-on-failure'] }}
