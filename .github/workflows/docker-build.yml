@@ -125,9 +125,9 @@ jobs:
           cache-from: type=gha
 
       - name: Notify failure webhook
-        if: ${{ failure() && inputs.notify-on-failure && secrets.failure-notification-webhook != '' }}
+        if: ${{ failure() && inputs['notify-on-failure'] && secrets['failure-notification-webhook'] != '' }}
         env:
-          NOTIFICATION_WEBHOOK: ${{ secrets.failure-notification-webhook }}
+          NOTIFICATION_WEBHOOK: ${{ secrets['failure-notification-webhook'] }}
           REPOSITORY: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
