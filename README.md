@@ -22,10 +22,12 @@ jobs:
     with:
       registry: docker.io                      # ou ghcr.io
       image-name: myorg/myapp
+      build-args: |
+        APP_ENV=prod
+        API_BASE_URL=https://api.example.com
       push: ${{ github.ref == 'refs/heads/main' }}
       with-trivy: true
-      smoke-test: |
-        docker run --rm local-test:ci php -r 'echo "OK";'
+      smoke-test-script: scripts/ci-smoke-test.sh
     secrets:
       registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
       registry-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -39,10 +41,11 @@ jobs:
 | `image-name` | string | — | Nom image sans registre |
 | `dockerfile` | string | `Dockerfile` | Chemin du Dockerfile |
 | `context` | string | `.` | Contexte de build |
+| `build-args` | string | `` | Arguments passés à `docker buildx` via `build-args` |
 | `push` | bool | `true` | Pousser après les tests |
 | `with-trivy` | bool | `true` | Scan CVE Trivy |
 | `trivy-ignore-file` | string | `.trivyignore` | Fichier d'exceptions Trivy |
-| `smoke-test` | string | `` | Commande de smoke test (image = `local-test:ci`) |
+| `smoke-test-script` | string | `scripts/ci-smoke-test.sh` | Script de smoke test exécuté si présent |
 
 ---
 

@@ -17,6 +17,10 @@ on:
       context:
         type: string
         default: '.'
+      build-args:
+        description: 'Optional Docker build arguments passed to buildx'
+        type: string
+        default: ''
       push:
         description: 'Push image to registry after build and tests'
         type: boolean
@@ -74,6 +78,7 @@ jobs:
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
+          build-args: ${{ inputs.build-args }}
           push: false
           load: true
           tags: local-test:ci
@@ -105,6 +110,7 @@ jobs:
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
+          build-args: ${{ inputs.build-args }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
