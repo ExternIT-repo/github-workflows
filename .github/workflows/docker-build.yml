@@ -17,10 +17,6 @@ on:
       context:
         type: string
         default: '.'
-      build-args:
-        description: 'Optional Docker build arguments passed to buildx'
-        type: string
-        default: ''
       push:
         description: 'Push image to registry after build and tests'
         type: boolean
@@ -29,6 +25,10 @@ on:
         description: 'Run Trivy CVE scan before push'
         type: boolean
         default: true
+      notify-on-failure:
+        description: 'Send a generic webhook notification if the workflow fails'
+        type: boolean
+        default: false
       trivy-ignore-file:
         type: string
         default: '.trivyignore'
@@ -36,11 +36,17 @@ on:
         description: 'Path to smoke test script in the repo (skipped if file absent)'
         type: string
         default: 'scripts/ci-smoke-test.sh'
+      build-args:
+        description: 'Build arguments passed to docker build (multiline key=value)'
+        type: string
+        default: ''
     secrets:
       registry-username:
         required: true
       registry-token:
         required: true
+      failure-notification-webhook:
+        required: false
 
 jobs:
   docker:
@@ -78,10 +84,10 @@ jobs:
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
-          build-args: ${{ inputs.build-args }}
           push: false
           load: true
           tags: local-test:ci
+          build-args: ${{ inputs.build-args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -110,10 +116,35 @@ jobs:
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile }}
-          build-args: ${{ inputs.build-args }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
           sbom: true
+          build-args: ${{ inputs.build-args }}
           cache-from: type=gha
+
+      - name: Notify failure webhook
+        if: ${{ failure() && inputs.notify-on-failure && secrets.failure-notification-webhook != '' }}
+        env:
+          NOTIFICATION_WEBHOOK: ${{ secrets.failure-notification-webhook }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          # Keep the payload provider-agnostic so each repository can route
+          # workflow failures to Slack, Teams, ntfy, or another webhook target
+          # without forcing a platform-specific contract in the shared workflow.
+          curl -fsSL -X POST "$NOTIFICATION_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            --data @- <<EOF
+          {
+            "status": "failure",
+            "repository": "$REPOSITORY",
+            "ref": "$REF_NAME",
+            "workflow": "$WORKFLOW_NAME",
+            "run_url": "$RUN_URL",
+            "message": "Docker build workflow failed for $REPOSITORY on $REF_NAME"
+          }
+          EOF

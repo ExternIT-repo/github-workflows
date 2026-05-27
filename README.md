@@ -27,10 +27,12 @@ jobs:
         API_BASE_URL=https://api.example.com
       push: ${{ github.ref == 'refs/heads/main' }}
       with-trivy: true
+      notify-on-failure: true
       smoke-test-script: scripts/ci-smoke-test.sh
     secrets:
       registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
       registry-token: ${{ secrets.DOCKERHUB_TOKEN }}
+      failure-notification-webhook: ${{ secrets.FAILURE_NOTIFICATION_WEBHOOK }}
 ```
 
 **Inputs**
@@ -44,8 +46,32 @@ jobs:
 | `build-args` | string | `` | Arguments passés à `docker buildx` via `build-args` |
 | `push` | bool | `true` | Pousser après les tests |
 | `with-trivy` | bool | `true` | Scan CVE Trivy |
+| `notify-on-failure` | bool | `false` | Envoie une notification webhook générique si le workflow échoue |
 | `trivy-ignore-file` | string | `.trivyignore` | Fichier d'exceptions Trivy |
 | `smoke-test-script` | string | `scripts/ci-smoke-test.sh` | Script de smoke test exécuté si présent |
+
+**Secrets**
+
+| Nom | Requis | Description |
+|-----|--------|-------------|
+| `registry-username` | oui | Identifiant du registre |
+| `registry-token` | oui | Token du registre |
+| `failure-notification-webhook` | non | Webhook HTTP POST appelé à la fin du workflow si une étape a échoué et que `notify-on-failure` vaut `true` |
+
+**Payload de notification**
+
+Le webhook reçoit un JSON simple, volontairement agnostique du provider:
+
+```json
+{
+  "status": "failure",
+  "repository": "owner/repo",
+  "ref": "dev",
+  "workflow": "Docker Build & Push",
+  "run_url": "https://github.com/owner/repo/actions/runs/123456789",
+  "message": "Docker build workflow failed for owner/repo on dev"
+}
+```
 
 ---
 
