@@ -23,6 +23,10 @@ on:
       badge-output:
         type: string
         default: 'badges/js-coverage.svg'
+      badge-branch:
+        description: 'Branch on which the badge is committed (default: main)'
+        type: string
+        default: 'main'
     secrets:
       codecov-token:
         required: false
@@ -49,7 +53,7 @@ jobs:
         run: ${{ inputs.test-command }}
 
       - name: Generate coverage badge
-        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', inputs.badge-branch)
         run: |
           node -e '
           const fs = require("fs");
@@ -64,7 +68,7 @@ jobs:
           '
 
       - name: Commit coverage badge
-        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', inputs.badge-branch)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 'Update JS coverage badge'

@@ -27,6 +27,10 @@ on:
       badge-output:
         type: string
         default: 'badges/php-coverage.svg'
+      badge-branch:
+        description: 'Branch on which the badge is committed (default: main)'
+        type: string
+        default: 'main'
 jobs:
   phpunit:
     name: PHPUnit
@@ -58,7 +62,7 @@ jobs:
         run: ${{ inputs.test-command }}
 
       - name: Generate coverage badge
-        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', inputs.badge-branch)
         run: |
           php -r '
           $xml = simplexml_load_file("${{ inputs.coverage-xml-path }}");
@@ -73,7 +77,7 @@ jobs:
           '
 
       - name: Commit coverage badge
-        if: inputs.coverage-type == 'badge' && github.event_name == 'push'
+        if: inputs.coverage-type == 'badge' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', inputs.badge-branch)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: 'Update PHP coverage badge'
