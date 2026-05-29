@@ -90,6 +90,7 @@ jobs:
           file: ${{ inputs.dockerfile }}
           push: false
           load: true
+          pull: true
           tags: local-ci:latest
           build-args: ${{ inputs.build-args }}
           cache-from: type=gha
